@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Today's Meds</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f5f2;
+    --card: #ffffff;
+    --text: #1f2320;
+    --muted: #6b7268;
+    --border: #e4e0da;
+    --am: #d97706;
+    --am-bg: #fff4e5;
+    --pm: #3b5bdb;
+    --pm-bg: #edf0ff;
+    --event-bg: #fdecec;
+    --event-border: #e0a1a1;
+    --event-text: #8a2c2c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17191b;
+      --card: #212426;
+      --text: #eceae6;
+      --muted: #9a9d99;
+      --border: #33373a;
+      --am-bg: #3a2c14;
+      --pm-bg: #1c2440;
+      --event-bg: #3a1f1f;
+      --event-border: #6b3a3a;
+      --event-text: #f0a8a8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17191b;
+    --card: #212426;
+    --text: #eceae6;
+    --muted: #9a9d99;
+    --border: #33373a;
+    --am-bg: #3a2c14;
+    --pm-bg: #1c2440;
+    --event-bg: #3a1f1f;
+    --event-border: #6b3a3a;
+    --event-text: #f0a8a8;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px 16px 48px;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 2px;
+  }
+  .subdate {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+  }
+  .event {
+    background: var(--event-bg);
+    border: 1px solid var(--event-border);
+    color: var(--event-text);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .event .note {
+    font-weight: 400;
+    opacity: 0.9;
+  }
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .section h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05rem;
+    margin: 0 0 10px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 0.95rem;
+  }
+  .badge.am { background: var(--am-bg); }
+  .badge.pm { background: var(--pm-bg); }
+  ul.meds {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  ul.meds li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border);
+    font-size: 1rem;
+  }
+  ul.meds li:first-child { border-top: none; }
+  .med-name { font-weight: 500; }
+  .med-dose {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .empty {
+    color: var(--muted);
+    font-size: 0.95rem;
+    padding: 4px 0;
+  }
+  .status {
+    text-align: center;
+    color: var(--muted);
+    margin-top: 40px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .status code {
+    background: var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="dateHeading">Loading…</h1>
+    <div class="subdate" id="dateSub"></div>
+
+    <div id="eventBanner" class="event" hidden></div>
+
+    <div class="section">
+      <h2><span class="badge am">☀️</span> Morning</h2>
+      <ul class="meds" id="morningList"></ul>
+    </div>
+
+    <div class="section">
+      <h2><span class="badge pm">🌙</span> Evening</h2>
+      <ul class="meds" id="eveningList"></ul>
+    </div>
+
+    <div class="status" id="status" hidden></div>
+  </div>
+
+<script>
+  // ---- CONFIG ---------------------------------------------------------
+  // Paste a read-only Airtable personal access token here before deploying.
+  // Create one at https://airtable.com/create/tokens with:
+  //   scope:  data.records:read
+  //   access: only this base ("Dog Meds")
+  // This token will be visible to anyone who loads this page's source, so
+  // keep its scope limited to read-only access on this one base.
+  const AIRTABLE_TOKEN = "PASTE_YOUR_AIRTABLE_TOKEN_HERE";
+  const BASE_ID = "appq1fKGypowD3jAL";
+  const DOSES_TABLE = "DailyDoses";
+  const EVENTS_TABLE = "Events";
+  // ----------------------------------------------------------------------
+
+  const MED_ORDER = [
+    "Prednisone 10mg",
+    "Levetiracetam 500mg",
+    "Omeprazole  20mg",
+    "Cerenia 60mg",
+    "Trazodone 50mg",
+    "Gabapentin 100mg",
+  ];
+
+  function todayISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function formatHeading(isoDate) {
+    const d = new Date(isoDate + "T00:00:00");
+    return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  }
+
+  async function airtableFetch(table, dateISO) {
+    const formula = encodeURIComponent(`IS_SAME({Date}, "${dateISO}", "day")`);
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(table)}?filterByFormula=${formula}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`${table} request failed (${res.status}): ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    return data.records || [];
+  }
+
+  function doseLabel(n) {
+    const num = Number(n);
+    const str = Number.isInteger(num) ? String(num) : String(num);
+    return `${str} tablet${num === 1 ? "" : "s"}`;
+  }
+
+  function renderMedList(el, records) {
+    el.innerHTML = "";
+    if (records.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "Nothing scheduled";
+      el.appendChild(li);
+      return;
+    }
+    records
+      .slice()
+      .sort((a, b) => {
+        const ai = MED_ORDER.indexOf(a.fields.Medication);
+        const bi = MED_ORDER.indexOf(b.fields.Medication);
+        if (ai === -1 && bi === -1) return (a.fields.Medication || "").localeCompare(b.fields.Medication || "");
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      })
+      .forEach((r) => {
+        const li = document.createElement("li");
+        const name = document.createElement("span");
+        name.className = "med-name";
+        name.textContent = r.fields.Medication || "(unnamed)";
+        const dose = document.createElement("span");
+        dose.className = "med-dose";
+        dose.textContent = doseLabel(r.fields.Dose);
+        li.appendChild(name);
+        li.appendChild(dose);
+        el.appendChild(li);
+      });
+  }
+
+  function renderEvents(el, records) {
+    if (records.length === 0) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = records
+      .map((r) => {
+        const type = r.fields["Event Type"] || "Event";
+        const notes = r.fields.Notes;
+        return `⚠️ Today: ${type}${notes ? ` <span class="note">(${notes})</span>` : ""}`;
+      })
+      .join("<br>");
+  }
+
+  async function main() {
+    const dateISO = todayISO();
+    document.getElementById("dateHeading").textContent = formatHeading(dateISO);
+    document.getElementById("dateSub").textContent = dateISO;
+
+    if (!AIRTABLE_TOKEN || AIRTABLE_TOKEN === "PASTE_YOUR_AIRTABLE_TOKEN_HERE") {
+      const status = document.getElementById("status");
+      status.hidden = false;
+      status.innerHTML = `No Airtable token configured yet.<br>Edit <code>dog-meds/index.html</code> and paste a read-only token into <code>AIRTABLE_TOKEN</code>.`;
+      document.getElementById("morningList").innerHTML = "";
+      document.getElementById("eveningList").innerHTML = "";
+      return;
+    }
+
+    try {
+      const [doses, events] = await Promise.all([
+        airtableFetch(DOSES_TABLE, dateISO),
+        airtableFetch(EVENTS_TABLE, dateISO),
+      ]);
+
+      renderEvents(document.getElementById("eventBanner"), events);
+      renderMedList(
+        document.getElementById("morningList"),
+        doses.filter((r) => r.fields.Morning)
+      );
+      renderMedList(
+        document.getElementById("eveningList"),
+        doses.filter((r) => r.fields.Evening)
+      );
+    } catch (err) {
+      const status = document.getElementById("status");
+      status.hidden = false;
+      status.textContent = `Couldn't load today's meds: ${err.message}`;
+    }
+  }
+
+  main();
+</script>
+</body>
+</html>
