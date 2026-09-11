@@ -66,7 +66,58 @@
   .subdate {
     color: var(--muted);
     font-size: 0.95rem;
-    margin-bottom: 20px;
+  }
+  .datebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .date-display {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+  .nav-btn {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .nav-btn:active { background: var(--border); }
+  .datecontrols {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0 20px;
+  }
+  .date-input {
+    font: inherit;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+  .today-btn {
+    font: inherit;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .today-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .event {
     background: var(--event-bg);
@@ -170,8 +221,18 @@
 </head>
 <body>
   <div class="wrap">
-    <h1 id="dateHeading">Loading…</h1>
-    <div class="subdate" id="dateSub"></div>
+    <div class="datebar">
+      <button id="prevDay" class="nav-btn" aria-label="Previous day">‹</button>
+      <div class="date-display">
+        <h1 id="dateHeading">Loading…</h1>
+        <div class="subdate" id="dateSub"></div>
+      </div>
+      <button id="nextDay" class="nav-btn" aria-label="Next day">›</button>
+    </div>
+    <div class="datecontrols">
+      <input type="date" id="datePicker" class="date-input" aria-label="Choose a date" />
+      <button id="todayBtn" class="today-btn">Today</button>
+    </div>
 
     <div id="eventBanner" class="event" hidden></div>
 
@@ -214,6 +275,15 @@
   function formatHeading(isoDate) {
     const d = new Date(isoDate + "T00:00:00");
     return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  }
+
+  function addDays(isoDate, delta) {
+    const d = new Date(isoDate + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   }
 
   async function airtableFetch(table, dateISO) {
@@ -279,25 +349,29 @@
       });
   }
 
-  function renderEvents(el, records) {
+  function renderEvents(el, records, isToday) {
     if (records.length === 0) {
       el.hidden = true;
       return;
     }
     el.hidden = false;
+    const prefix = isToday ? "Today: " : "";
     el.innerHTML = records
       .map((r) => {
         const type = r.fields["Event Type"] || "Event";
         const notes = r.fields.Notes;
-        return `⚠️ Today: ${type}${notes ? ` <span class="note">(${notes})</span>` : ""}`;
+        return `⚠️ ${prefix}${type}${notes ? ` <span class="note">(${notes})</span>` : ""}`;
       })
       .join("<br>");
   }
 
-  async function main() {
-    const dateISO = todayISO();
+  async function loadDate(dateISO) {
     document.getElementById("dateHeading").textContent = formatHeading(dateISO);
     document.getElementById("dateSub").textContent = dateISO;
+    document.getElementById("datePicker").value = dateISO;
+    document.getElementById("todayBtn").disabled = dateISO === todayISO();
+    document.getElementById("eventBanner").hidden = true;
+    document.getElementById("status").hidden = true;
     renderSkeleton(document.getElementById("morningList"));
     renderSkeleton(document.getElementById("eveningList"));
 
@@ -316,7 +390,7 @@
         airtableFetch(EVENTS_TABLE, dateISO),
       ]);
 
-      renderEvents(document.getElementById("eventBanner"), events);
+      renderEvents(document.getElementById("eventBanner"), events, dateISO === todayISO());
       renderMedList(
         document.getElementById("morningList"),
         doses.filter((r) => r.fields.Morning)
@@ -330,11 +404,28 @@
       document.getElementById("eveningList").innerHTML = "";
       const status = document.getElementById("status");
       status.hidden = false;
-      status.textContent = `Couldn't load today's meds: ${err.message}`;
+      status.textContent = `Couldn't load meds for this date: ${err.message}`;
     }
   }
 
-  main();
+  function currentSelectedISO() {
+    return document.getElementById("datePicker").value || todayISO();
+  }
+
+  document.getElementById("prevDay").addEventListener("click", () => {
+    loadDate(addDays(currentSelectedISO(), -1));
+  });
+  document.getElementById("nextDay").addEventListener("click", () => {
+    loadDate(addDays(currentSelectedISO(), 1));
+  });
+  document.getElementById("todayBtn").addEventListener("click", () => {
+    loadDate(todayISO());
+  });
+  document.getElementById("datePicker").addEventListener("change", (e) => {
+    if (e.target.value) loadDate(e.target.value);
+  });
+
+  loadDate(todayISO());
 </script>
 </body>
 </html>
