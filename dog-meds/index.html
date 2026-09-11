@@ -131,6 +131,27 @@
     font-size: 0.95rem;
     padding: 4px 0;
   }
+  .skeleton {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--border) 25%, var(--card) 50%, var(--border) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  ul.meds li.skeleton-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  ul.meds li.skeleton-row .skeleton.name { width: 55%; }
+  ul.meds li.skeleton-row .skeleton.dose { width: 20%; }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton { animation: none; }
+  }
   .status {
     text-align: center;
     color: var(--muted);
@@ -208,6 +229,16 @@
     return data.records || [];
   }
 
+  function renderSkeleton(el, rows = 3) {
+    el.innerHTML = "";
+    for (let i = 0; i < rows; i++) {
+      const li = document.createElement("li");
+      li.className = "skeleton-row";
+      li.innerHTML = `<span class="skeleton name"></span><span class="skeleton dose"></span>`;
+      el.appendChild(li);
+    }
+  }
+
   function doseLabel(n) {
     const num = Number(n);
     const str = Number.isInteger(num) ? String(num) : String(num);
@@ -266,6 +297,8 @@
     const dateISO = todayISO();
     document.getElementById("dateHeading").textContent = formatHeading(dateISO);
     document.getElementById("dateSub").textContent = dateISO;
+    renderSkeleton(document.getElementById("morningList"));
+    renderSkeleton(document.getElementById("eveningList"));
 
     if (!AIRTABLE_TOKEN || AIRTABLE_TOKEN === "PASTE_YOUR_AIRTABLE_TOKEN_HERE") {
       const status = document.getElementById("status");
@@ -292,6 +325,8 @@
         doses.filter((r) => r.fields.Evening)
       );
     } catch (err) {
+      document.getElementById("morningList").innerHTML = "";
+      document.getElementById("eveningList").innerHTML = "";
       const status = document.getElementById("status");
       status.hidden = false;
       status.textContent = `Couldn't load today's meds: ${err.message}`;
